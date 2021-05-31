@@ -23,7 +23,7 @@ inline void analyse(benchmark::State& state, evmc_revision rev, bytes_view code)
     auto bytes_analysed = uint64_t{0};
     for (auto _ : state)
     {
-        auto r = evmone::analyze(rev, code.data(), code.size());
+        auto r = evmone::analyze(rev, code.data(), code.size(), {});
         benchmark::DoNotOptimize(r);
         bytes_analysed += code.size();
     }
