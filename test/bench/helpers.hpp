@@ -9,6 +9,7 @@
 #include <evmc/mocked_host.hpp>
 #include <evmone/analysis.hpp>
 #include <evmone/baseline.hpp>
+#include <evmone/eof.hpp>
 
 namespace evmone::test
 {
@@ -37,7 +38,7 @@ inline void baseline_analyze(benchmark::State& state, bytes_view code) noexcept
     auto bytes_analysed = uint64_t{0};
     for (auto _ : state)
     {
-        auto r = evmone::baseline::analyze(code.data(), code.size());
+        auto r = evmone::baseline::analyze(code.data(), code.size(), {});
         benchmark::DoNotOptimize(r);
         bytes_analysed += code.size();
     }

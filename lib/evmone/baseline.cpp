@@ -12,21 +12,22 @@
 
 namespace evmone::baseline
 {
-CodeAnalysis analyze(const uint8_t* code, size_t code_size)
+CodeAnalysis analyze(const uint8_t* code, size_t code_size, const EOF1Header& header)
 {
     // To find if op is any PUSH opcode (OP_PUSH1 <= op <= OP_PUSH32)
     // it can be noticed that OP_PUSH32 is INT8_MAX (0x7f) therefore
     // static_cast<int8_t>(op) <= OP_PUSH32 is always true and can be skipped.
     static_assert(OP_PUSH32 == std::numeric_limits<int8_t>::max());
 
+    // TODO optimize to store only bits for code section
     CodeAnalysis::JumpdestMap map(code_size);  // Allocate and init bitmap with zeros.
-    for (size_t i = 0; i < code_size; ++i)
+    for (auto i = header.code_begin(code); i < header.code_end(code, code_size); ++i)
     {
-        const auto op = code[i];
+        const auto op = *i;
         if (static_cast<int8_t>(op) >= OP_PUSH1)  // If any PUSH opcode (see explanation above).
             i += op - size_t{OP_PUSH1 - 1};       // Skip PUSH data.
         else if (INTX_UNLIKELY(op == OP_JUMPDEST))
-            map[i] = true;
+            map[static_cast<size_t>(i - code)] = true;
     }
     return CodeAnalysis{std::move(map)};
 }
@@ -786,7 +787,7 @@ evmc_result execute(evmc_vm* c_vm, const evmc_host_interface* host, evmc_host_co
     EOF1Header eof1_header;
     if (rev >= EVMC_SHANGHAI && is_eof_code(code, code_size))
         eof1_header = read_valid_eof1_header(code);
-    const auto jumpdest_map = analyze(code, code_size);
+    const auto jumpdest_map = analyze(code, code_size, eof1_header);
     auto state = std::make_unique<ExecutionState>(*msg, rev, *host, ctx, code, code_size);
     return execute(*vm, *state, eof1_header, jumpdest_map);
 }
