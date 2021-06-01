@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "baseline.hpp"
+#include "eof.hpp"
 #include "execution_state.hpp"
 #include "instructions.hpp"
 #include "vm.hpp"
@@ -97,7 +98,8 @@ inline evmc_status_code check_requirements(const char* const* instruction_names,
 }
 
 template <bool TracingEnabled>
-evmc_result execute(const VM& vm, ExecutionState& state, const CodeAnalysis& analysis) noexcept
+evmc_result execute(const VM& vm, ExecutionState& state, const EOF1Header& header,
+    const CodeAnalysis& analysis) noexcept
 {
     auto* tracer = vm.get_tracer();
     if constexpr (TracingEnabled)
@@ -106,9 +108,10 @@ evmc_result execute(const VM& vm, ExecutionState& state, const CodeAnalysis& ana
     const auto instruction_names = evmc_get_instruction_names_table(state.rev);
     const auto instruction_metrics = evmc_get_instruction_metrics_table(state.rev);
 
-    const auto* const code = state.code.data();
-    const auto* const code_end = code + state.code.size();
-    auto pc = code;
+    const auto* const code_container = state.code.data();
+    const auto* const code = header.code_begin(code_container);
+    const auto* const code_end = header.code_end(code_container, state.code.size());
+    auto* pc = code;
     while (pc != code_end)
     {
         if constexpr (TracingEnabled)
@@ -397,7 +400,7 @@ evmc_result execute(const VM& vm, ExecutionState& state, const CodeAnalysis& ana
             continue;
 
         case OP_PC:
-            state.stack.push(pc - code);
+            state.stack.push(pc - code_container);
             break;
         case OP_MSIZE:
             msize(state);
@@ -767,20 +770,24 @@ exit:
 }
 }  // namespace
 
-evmc_result execute(const VM& vm, ExecutionState& state, const CodeAnalysis& analysis) noexcept
+evmc_result execute(const VM& vm, ExecutionState& state, const EOF1Header& header,
+    const CodeAnalysis& analysis) noexcept
 {
     if (INTX_UNLIKELY(vm.get_tracer() != nullptr))
-        return execute<true>(vm, state, analysis);
+        return execute<true>(vm, state, header, analysis);
 
-    return execute<false>(vm, state, analysis);
+    return execute<false>(vm, state, header, analysis);
 }
 
 evmc_result execute(evmc_vm* c_vm, const evmc_host_interface* host, evmc_host_context* ctx,
     evmc_revision rev, const evmc_message* msg, const uint8_t* code, size_t code_size) noexcept
 {
     auto vm = static_cast<VM*>(c_vm);
+    EOF1Header eof1_header;
+    if (rev >= EVMC_SHANGHAI && is_eof_code(code, code_size))
+        eof1_header = read_valid_eof1_header(code);
     const auto jumpdest_map = analyze(code, code_size);
     auto state = std::make_unique<ExecutionState>(*msg, rev, *host, ctx, code, code_size);
-    return execute(*vm, *state, jumpdest_map);
+    return execute(*vm, *state, eof1_header, jumpdest_map);
 }
 }  // namespace evmone::baseline
