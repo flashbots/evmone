@@ -103,6 +103,9 @@ if(EVMONE_TESTING)
     add_subdirectory(test)
 endif()
 
+list(APPEND CMAKE_MODULE_PATH ${FindSGX.cmake_FILE})
+find_package(SGX REQUIRED)
+
 
 # INSTALL
 
